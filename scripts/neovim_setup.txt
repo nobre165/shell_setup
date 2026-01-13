@@ -1,0 +1,377 @@
+#!/usr/bin/env bash
+
+#set -xv
+set -euo pipefail
+
+#############################################################################
+#                                                                           #
+# Name: neovim_setup.sh                                                     #
+# Path: N/A                                                                 #
+# Host(s): N/A                                                              #
+# Info: Automated Setup Script for Consolidated Kickstart.nvim              #
+# This script:                                                              #
+# - Backs up your existing Neovim config (if any)                           #
+# - Clones the latest kickstart.Neovim                                      #
+# - Adds your exact preferred vim options (previous)                        #
+# - Adds your basic diagnostic keymaps at the end of the Basic Keymaps      #
+#   section                                                                 #
+# - Automatically adds popular consolidated plugins:                        #
+#   • Catppuccin colorscheme (mocha variant)                                #
+#   • Harpoon2 (fast file navigation)                                       #
+#   • Undotree (visual undo history)                                        #
+#   • vim-fugitive (Git integration)                                        #
+# - Places them cleanly in the plugins table                                #
+#   (after the "dependencies" note)                                         #
+#                                                                           #
+# Works on Linux/macOS (requires git and bash).                             #
+# For Windows, use Git Bash, WSL.                                           #
+# After running, open `nvim`. lazy.nvim will install everything             #
+# automatically.                                                            #
+#                                                                           #
+# Modification date: DD/MM/YYYY                                             #
+# Modified by: XXXXXX                                                       #
+# Modifications:                                                            #
+# - XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX                                          #
+#                                                                           #
+#############################################################################
+
+#############################################################################
+# Logging Framework                                                         #
+#############################################################################
+
+SCRIPT_NAME="${0%.*}"
+LOG_FILE="$(pwd)/${SCRIPT_NAME}.log"
+: > "$LOG_FILE"
+
+# Redirect stdout and stderr to log file, but keep FD 3 for console output
+exec 3>&1 1>>"$LOG_FILE" 2>&1
+
+# Not reinventing the wheel. From the following link:
+# https://www.ludovicocaldara.net/dba/bash-tips-4-use-logging-levels/
+colblk='\033[0;30m' # Black - Regular
+colred='\033[0;31m' # Red
+colgrn='\033[0;32m' # Green
+colylw='\033[0;33m' # Yellow
+colpur='\033[0;35m' # Purple
+colrst='\033[0m'    # Text Reset
+colwht='\033[0;37m' # White
+
+verbosity=5
+
+### verbosity levels
+silent_lvl=0
+crt_lvl=1
+err_lvl=2
+wrn_lvl=3
+ntf_lvl=4
+inf_lvl=5
+dbg_lvl=6
+
+## esilent prints output even in silent mode
+function esilent {
+    verb_lvl=$silent_lvl elog "$*"
+}
+
+function enotify {
+    verb_lvl=$ntf_lvl elog "$*"
+}
+
+function eok {
+    verb_lvl=$ntf_lvl elog "SUCCESS - $*"
+}
+
+function ewarn {
+    verb_lvl=$wrn_lvl elog "${colylw}WARNING${colrst} - $*"
+}
+
+function einfo {
+    verb_lvl=$inf_lvl elog "${colwht}INFO${colrst} ---- $*"
+}
+
+function edebug {
+    verb_lvl=$dbg_lvl elog "${colgrn}DEBUG${colrst} --- $*"
+}
+
+function eerror {
+    verb_lvl=$err_lvl elog "${colred}ERROR${colrst} --- $*"
+}
+
+function ecrit {
+    verb_lvl=$crt_lvl elog "${colpur}FATAL${colrst} --- $*"
+}
+
+function edumpvar {
+    for var in "$@"; do
+        edebug "$var=${!var}"
+    done
+}
+
+function elog {
+    datestring=$(date +"%Y-%m-%d %H:%M:%S")
+    if [[ $verbosity -lt $verb_lvl ]]; then
+        #echo -e "${datestring} - $*" >> "$LOG_FILE" 2>&1
+        echo -e "${datestring} - $*" >&3
+    else
+        #echo -e "${datestring} - $*" 2>&1 | tee -a "$LOG_FILE"
+        echo -e "${datestring} - $*" >&3
+        #echo -e "${datestring} - $*" >&3 | exec 3>&1 1>> "$LOG_FILE" 2>&1
+    fi
+}
+
+trap 'eerror "Script failed at line $LINENO"' ERR
+
+
+#############################################################################
+# Environment variables                                                     #
+#############################################################################
+
+
+#############################################################################
+# Function definitions                                                      #
+#############################################################################
+
+#----------------------------------------------------------------------------
+# Function: usage
+#
+# Arguments:
+# - N/A
+#
+# Retun:
+# - N/A
+
+function usage {
+
+    cat <<EOF
+    Usage: $0 [--help|-h]
+        --help|-h: This help
+EOF
+
+}
+
+function setup_neovim {
+
+    # Backup existing config
+    if [[ -d "$HOME/.config/nvim" ]]
+    then
+        BACKUP_DIR="$HOME/.config/nvim.backup.$(date +%Y%m%d_%H%M%S)"
+        einfo "Backing up existing ~/.config/nvim to $BACKUP_DIR"
+        mv "$HOME/.config/nvim" "$BACKUP_DIR"
+    fi
+
+    # Clean old plugin data (safe fresh start)
+    rm -rf "$HOME/.local/share/nvim"
+
+    # Clone latest kickstart.nvim
+    einfo "Cloning kickstart.nvim into ~/.config/nvim..."
+    git clone https://github.com/nvim-lua/kickstart.nvim.git "$HOME/.config/nvim"
+
+    # Path to init.lua
+    INIT_LUA="$HOME/.config/nvim/init.lua"
+
+    # 1. Add custom plugins
+    CUSTOM_PLUGINS=$(cat <<'EOF'
+
+  -- Consolidated custom plugins (added automatically)
+  -- Catppuccin colorscheme (cozy, modern – feel free to change flavour)
+  {
+    "catppuccin/nvim",
+    name = "catppuccin",
+    priority = 1000,  -- Load early for colorscheme
+    opts = {
+      flavour = "mocha",  -- options: latte, frappe, macchiato, mocha
+      transparent_background = false,
+      integrations = {
+        treesitter = true,
+        telescope = true,
+        native_lsp = true,
+        gitsigns = true,
+        which_key = true,
+      },
+    },
+    config = function(_, opts)
+      require("catppuccin").setup(opts)
+      vim.cmd.colorscheme("catppuccin")
+    end,
+  },
+
+  -- Harpoon2 – fast file/bookmark navigation (ThePrimeagen style)
+  {
+    "ThePrimeagen/harpoon",
+    branch = "harpoon2",
+    dependencies = { "nvim-lua/plenary.nvim" },
+    config = function()
+      local harpoon = require("harpoon")
+      harpoon:setup({})
+
+      vim.keymap.set("n", "<leader>a", function() harpoon:list():add() end, { desc = "Harpoon: Add file" })
+      vim.keymap.set("n", "<leader>h", function() harpoon.ui:toggle_quick_menu(harpoon:list()) end, { desc = "Harpoon: Open menu" })
+
+      vim.keymap.set("n", "<leader>1", function() harpoon:list():select(1) end, { desc = "Harpoon: Go to file 1" })
+      vim.keymap.set("n", "<leader>2", function() harpoon:list():select(2) end, { desc = "Harpoon: Go to file 2" })
+      vim.keymap.set("n", "<leader>3", function() harpoon:list():select(3) end, { desc = "Harpoon: Go to file 3" })
+      vim.keymap.set("n", "<leader>4", function() harpoon:list():select(4) end, { desc = "Harpoon: Go to file 4" })
+
+      -- Cycle through harpooned files
+      vim.keymap.set("n", "<C-S-P>", function() harpoon:list():prev() end)
+      vim.keymap.set("n", "<C-S-N>", function() harpoon:list():next() end)
+    end,
+  },
+
+  -- Undotree – visual undo history
+  {
+    "mbbill/undotree",
+    keys = {
+      { "<leader>u", vim.cmd.UndotreeToggle, desc = "Toggle Undotree" },
+    },
+  },
+
+  -- vim-fugitive – best Git integration
+  {
+    "tpope/vim-fugitive",
+    cmd = { "Git", "G" },
+    keys = {
+      { "<leader>gs", vim.cmd.Git, desc = "Fugitive: Git status" },
+    },
+  },
+EOF
+)
+
+    # Insert custom plugins after the "-- NOTE: Plugins can specify dependencies." comment
+    # This places them right before Telescope (perfect spot in current kickstart.nvim)
+    einfo "Adding custom plugins to init.lua..."
+    sed -i '/-- NOTE: Plugins can specify dependencies./a\
+    '"$CUSTOM_PLUGINS" "$INIT_LUA"
+
+    # 2. Add custom options (same as previous)
+    CUSTOM_OPTIONS=$(cat <<'EOF'
+
+  -- Custom user preferences (added automatically)
+  vim.g.mapleader = ' '
+  vim.g.maplocalleader = ' '
+
+  vim.opt.number = true
+  vim.opt.relativenumber = true
+  vim.opt.mouse = 'a'
+  vim.opt.showmode = false
+  vim.opt.clipboard = 'unnamedplus'
+  vim.opt.breakindent = true
+  vim.opt.undofile = true
+  vim.opt.ignorecase = true
+  vim.opt.smartcase = true
+  vim.opt.signcolumn = 'yes'
+  vim.opt.updatetime = 250
+  vim.opt.timeoutlen = 300
+  vim.opt.splitright = true
+  vim.opt.splitbelow = true
+  vim.opt.inccommand = 'split'
+  vim.opt.scrolloff = 10
+EOF
+)
+
+    einfo "Adding custom vim options..."
+    sed -i '/vim\.o\.confirm = true/a\
+    '"$CUSTOM_OPTIONS" "$INIT_LUA"
+
+    # 3. Add custom basic keymaps
+    CUSTOM_KEYMAPS=$(cat <<'EOF'
+
+  -- Custom basic diagnostic keymaps (added automatically)
+  vim.keymap.set('n', '<Esc>', '<cmd>nohlsearch<CR>')
+
+  vim.keymap.set('n', '[d', vim.diagnostic.goto_prev, { desc = 'Go to previous [D]iagnostic message' })
+  vim.keymap.set('n', ']d', vim.diagnostic.goto_next, { desc = 'Go to next [D]iagnostic message' })
+  vim.keymap.set('n', '<leader>e', vim.diagnostic.open_float, { desc = 'Show diagnostic [E]rror messages' })
+  vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
+EOF
+)
+
+    einfo "Adding custom basic keymaps at the end of the Basic Keymaps section..."
+    # Anchor: the unique comment right after the last default keymap
+    sed -i '/-- NOTE: Some terminals have colliding keymaps or are not able to send distinct keycodes/a\
+    '"$CUSTOM_KEYMAPS" "$INIT_LUA"
+
+}
+
+#############################################################################
+# Script main logic                                                         #
+#############################################################################
+
+#############################################################################
+# Argument Parsing (Refactored using getopt)                                #
+#############################################################################
+
+# --- Define options for getopt ---
+# Short options: h, e: (e requires an argument)
+# Long options: help, exclude-nodes: (requires argument), output-dir: (requires argument)
+SHORT_OPTS="h"
+LONG_OPTS="help"
+
+# --- Check for getopt availability ---
+if ! command -v getopt > /dev/null; then
+    eerror "getopt command is required for argument parsing but not found."
+    exit 1
+fi
+
+# --- Parse arguments using getopt ---
+# The '--' ensures that getopt processing stops if it encounters '--' in the arguments.
+# "$@" passes the original script arguments correctly, preserving spaces within arguments.
+PARSED_OPTIONS=$(getopt --options "$SHORT_OPTS" --longoptions "$LONG_OPTS" --name "$0" -- "$@")
+GETOPT_RC="$?"
+
+if [[ $GETOPT_RC -ne 0 ]]; then
+    # getopt reports errors to stderr, so we just show usage and exit.
+    ewarn "Argument parsing error (see stderr output from getopt)." # Use ewarn or eerror
+    usage # Call existing usage function
+    exit 1
+fi
+
+# --- Replace script's arguments with parsed & sanitized arguments ---
+# This eval is considered safe because PARSED_OPTIONS is output from getopt
+# and is specifically formatted and quoted for this purpose.
+eval set -- "$PARSED_OPTIONS"
+
+# --- Process the parsed options ---
+DIAG_FLAG="0"
+einfo "Processing command-line arguments..." # Optional logging
+while true; do
+    case "$1" in
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        --) # End of options marker from getopt
+            shift # Consume the '--'
+            break # Exit the loop
+            ;;
+        *)
+            # This should not happen if getopt works correctly
+            eerror "Internal argument parsing error! Unexpected option: $1"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+# --- Handle remaining positional arguments ---
+# This script doesn't expect positional arguments, so error if any are left.
+if [[ "$#" -gt 0 ]]; then
+    eerror "Unexpected positional arguments found: $*" >&2
+    usage
+    exit 1
+fi
+
+# --- Proceed with script logic ---
+einfo "Starting automated Kickstart.nvim setup..."
+setup_neovim
+
+einfo "Setup complete!"
+einfo ""
+einfo "Next steps:"
+einfo "1. Open Neovim: nvim"
+einfo "   • lazy.nvim will automatically install all plugins (takes 1-2 minutes)"
+einfo "   • Run :Lazy to monitor progress"
+einfo "   • Run :checkhealth to verify everything"
+einfo "2. Customize further by editing ~/.config/nvim/init.lua (heavily commented!)"
+einfo "3. Optional: Fork the repo on GitHub for your own version control of changes."
+einfo ""
+einfo "Enjoy your fast, modern Neovim setup with Harpoon, Undotree, Fugitive, and Catppuccin!"

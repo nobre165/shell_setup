@@ -1,0 +1,49 @@
+# --- General & OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+._*
+
+# --- Editors & IDEs ---
+# VS Code
+.vscode/
+*.code-workspace
+
+# Vim/Emacs
+*~
+*.swp
+*.swo
+\#*\#
+
+# JetBrains / IntelliJ
+.idea/
+
+# --- Bash/Shell Specifics ---
+# History files (if generated locally)
+.bash_history
+.zsh_history
+
+# Backup files
+*.bak
+*.old
+*.tmp
+
+# Logs and Output
+*.log
+logs/
+output/
+tmp/
+temp/
+
+# --- Secrets & Environment Variables ---
+# NEVER commit secrets to git
+.env
+.env.*
+secrets.sh
+config_local.sh
+credentials.conf
+
+# --- Test Coverage & Reports ---
+# If you use tools like bats or kcov
+coverage/
+report/
