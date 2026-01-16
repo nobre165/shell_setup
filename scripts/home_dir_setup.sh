@@ -133,7 +133,7 @@ ASDF_LANGUAGES=(
 #export PERL_USE_UNSAFE_INC=1
 
 PACKAGES_UBUNTU=(
-    allacritty
+    alacritty
     bat
     build-essential
     curl 
@@ -214,7 +214,7 @@ PACKAGES_WSL=(
     zsh
 )
 PACKAGES_RHEL=(
-    allacritty
+    alacritty
     bat
     bzip2-devel
     curl 
@@ -261,21 +261,18 @@ PACKAGES_RHEL=(
     zsh
 )
 PACKAGES_ARCH=(
-    allacritty
+    alacritty
     base-devel
     bat
     bzip2
     curl 
-    dirmngr 
     eza
-    fd-find
+    fd
     fontconfig
     fzf
     gcc
     git 
-    git-extras
     github-cli
-    gh
     gnupg 
     httpie
     kitty
@@ -295,7 +292,7 @@ PACKAGES_ARCH=(
     sqlite
     stow
     terminator
-    tk-dev 
+    tk
     tmux
     unzip
     vim
@@ -365,9 +362,7 @@ function check_platform {
         exit 1
     fi
 
-    uname -r | grep -qi microsoft
-    RC=$?
-    if (( $RC == 0 ))
+    if uname -r | grep -qi microsoft
     then
         IS_WSL=true
     fi
@@ -457,7 +452,7 @@ function install_packages {
     einfo "Installing requested packages..."
     if [[ IS_WSL == "false" ]]
     then
-        case $DISTRO in
+        case $ID in
             ubuntu|debian|kali|linuxmint )
                 einfo "Using apt package manager..."
                 # Alacritty: add PPA for latest version (recommended over building from source)
@@ -709,7 +704,10 @@ function setup_dotfiles {
     rm -rf .fzf.zsh .zprofile .zsh_aliases .zshenv .zshrc .zsh_oh-my-zsh .zshrc_starship
     cd ~/dotfiles
     stow zsh
-    $HOME/.fzf/install --key-bindings --completion --no-update-rc
+    if [[ -f $HOME/.fzf/install ]]
+    then
+        $HOME/.fzf/install --key-bindings --completion --no-update-rc
+    fi
 
     # Setting up fonts
     # Setting up git
